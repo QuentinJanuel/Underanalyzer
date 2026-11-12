@@ -39,9 +39,17 @@ internal sealed class BlockSimulator
     /// </summary>
     public static void Simulate(ASTBuilder builder, List<IStatementNode> output, ControlFlow.Block block)
     {
+        // Which instruction began the statement currently being built, and how many statements had
+        // been emitted before it. Everything from there up to whichever instruction completes a
+        // statement belongs to that statement, which is what lets a caller point at one line of a
+        // compiled game. See DecompileContext.StatementInstructions.
+        IGMInstruction? statementStart = null;
+        int alreadyEmitted = output.Count;
+
         for (int i = builder.StartBlockInstructionIndex; i < block.Instructions.Count; i++)
         {
             IGMInstruction instr = block.Instructions[i];
+            statementStart ??= instr;
 
             switch (instr.Kind)
             {
@@ -93,6 +101,19 @@ internal sealed class BlockSimulator
                 case Opcode.Extended:
                     SimulateExtended(builder, output, instr);
                     break;
+            }
+
+            // This instruction completed one or more statements, so it is their last and
+            // `statementStart` was their first. The next statement starts at whatever follows.
+            if (output.Count != alreadyEmitted)
+            {
+                for (int added = alreadyEmitted; added < output.Count; added++)
+                {
+                    builder.Context.StatementInstructions[output[added]] = (statementStart, instr);
+                }
+
+                alreadyEmitted = output.Count;
+                statementStart = null;
             }
         }
 

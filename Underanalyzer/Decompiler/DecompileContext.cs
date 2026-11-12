@@ -35,6 +35,39 @@ public sealed class DecompileContext
     /// </summary>
     public List<IDecompileWarning> Warnings { get; } = [];
 
+    /// <summary>
+    /// For each simple statement the block simulator emitted, the first and last VM instruction it
+    /// was built from.
+    /// </summary>
+    /// <remarks>
+    /// This exists so a caller can point at one statement of a compiled game and say "run something
+    /// here", which needs an address -- and the AST otherwise keeps none, since it is a tree built
+    /// to be printed.
+    ///
+    /// Only statements the simulator itself produces are listed. An <c>if</c> or a loop is assembled
+    /// from control flow rather than emitted here, and the compiler temporaries the simulator
+    /// invents are cleaned out of the tree afterwards and so are simply never looked up.
+    ///
+    /// Keyed by node identity, and deliberately beside the nodes rather than on them: hanging an
+    /// address off every statement kind would be a far larger change to a far more load-bearing type.
+    /// </remarks>
+    public Dictionary<AST.IStatementNode, (IGMInstruction First, IGMInstruction Last)> StatementInstructions { get; }
+        = new(StatementNodeIdentity.Instance);
+
+    /// <summary>
+    /// Identity, not equality, for keying statements. Written out because
+    /// <c>ReferenceEqualityComparer</c> does not exist on this target framework.
+    /// </summary>
+    private sealed class StatementNodeIdentity : IEqualityComparer<AST.IStatementNode>
+    {
+        public static readonly StatementNodeIdentity Instance = new();
+
+        public bool Equals(AST.IStatementNode? a, AST.IStatementNode? b) => ReferenceEquals(a, b);
+
+        public int GetHashCode(AST.IStatementNode node) =>
+            System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(node);
+    }
+
     // Helpers to refer to data on game context
     internal bool OlderThanBytecode15 { get => GameContext.Bytecode14OrLower; }
     internal bool GMLv2 { get => GameContext.UsingGMLv2; }
